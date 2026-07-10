@@ -253,6 +253,48 @@
     </div>
   </template>
 
+  <!-- ============ WATCHLIST ============ -->
+  <template v-if="tab==='watchlist'">
+    <div class="px-4 pt-4">
+      <div class="flex items-baseline justify-between mb-2.5">
+        <div class="font-disp font-semibold text-[17px]">重點觀察股</div>
+        <div class="text-[11px] text-slate-500">{{ watchlist.length }} 檔</div>
+      </div>
+      <div class="text-[11px] text-slate-500 mb-3 leading-relaxed">跟持股不同，這裡是您想追蹤但還沒買進的股票，可以不限於十大板塊觀察池，任何代碼都能加入。系統一樣會抓資料並套用完整的技術面/籌碼面篩選邏輯。</div>
+
+      <div class="bg-surface border border-line rounded-2xl p-3.5 mb-4">
+        <div class="text-xs text-slate-400 mb-1.5">新增觀察股</div>
+        <div class="grid grid-cols-2 gap-2">
+          <input type="text" v-model="newWatchForm.code" placeholder="代碼，如 2454" class="bg-surface2 border border-line rounded-lg px-3 py-2 text-sm font-mono">
+          <input type="text" v-model="newWatchForm.name" placeholder="名稱（選填，會自動帶入）" class="bg-surface2 border border-line rounded-lg px-3 py-2 text-sm font-mono">
+        </div>
+        <button @click="addWatchlist" class="w-full bg-gold text-[#1A1305] font-semibold text-sm py-2.5 rounded-xl mt-2.5">加入觀察</button>
+      </div>
+
+      <div v-if="watchlist.length===0" class="py-9 px-5 text-center text-slate-500 text-[13px] leading-relaxed">
+        尚未加入任何觀察股。<br>輸入股票代碼即可開始追蹤，不用等它進入十大板塊清單。
+      </div>
+
+      <div v-for="(w,idx) in watchlistResults" :key="w.code" class="bg-surface border border-line rounded-2xl p-3.5 mb-2.5">
+        <div class="flex justify-between items-start cursor-pointer" @click="openStockDetail(w)">
+          <div>
+            <div class="text-[15px] font-semibold">{{ w.name }}<span class="font-mono text-[11px] text-slate-500 ml-1.5">{{ w.code }}</span></div>
+            <div class="text-[10.5px] text-slate-500 mt-0.5">加入於 {{ watchlist[idx].addedDate }}</div>
+          </div>
+          <div class="text-right">
+            <div class="font-mono text-base font-semibold">{{ fmt(w.close,2) }}</div>
+            <div class="font-mono text-[11.5px]" :class="pctClass(w.changePct)">{{ pctSign(w.changePct) }}{{ fmt(w.changePct,2) }}%</div>
+          </div>
+        </div>
+        <div v-if="w.close==null" class="text-[11px] text-gold mt-2">尚無資料，請按總覽頁右上角「更新資料」</div>
+        <div v-else class="flex flex-wrap gap-1.5 mt-2" v-html="tagsHtml(w)"></div>
+        <div class="text-right mt-2.5">
+          <button @click="removeWatchlist(idx)" class="text-up bg-up/10 border border-up/40 text-xs px-3 py-1.5 rounded-lg">移除觀察</button>
+        </div>
+      </div>
+    </div>
+  </template>
+
   <!-- ============ HOLDINGS ============ -->
   <template v-if="tab==='holdings'">
     <div class="px-4 pt-4">
@@ -406,7 +448,7 @@
 
   <!-- Bottom tab bar -->
   <div class="fixed bottom-0 left-0 right-0 z-40 bg-[#0A0E13]/96 backdrop-blur-md border-t border-line">
-    <div class="max-w-[520px] mx-auto grid grid-cols-5">
+    <div class="max-w-[520px] mx-auto grid grid-cols-6">
       <div v-for="t in tabs" :key="t.key" @click="tab=t.key" class="flex flex-col items-center gap-[3px] pt-[9px] pb-2.5 text-[10px]" :class="tab===t.key ? 'text-gold' : 'text-slate-500'">
         <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" v-html="t.icon(tab===t.key)"></svg>
         <span>{{ t.label }}</span>
@@ -424,7 +466,7 @@
       <div class="text-xs text-slate-500 uppercase tracking-wide mb-2.5">新增持股</div>
       <div class="mb-3"><label class="block text-xs text-slate-400 mb-1.5">股票</label>
         <select v-model="addHoldingForm.code" class="w-full bg-surface2 border border-line rounded-lg px-3 py-2.5 text-sm font-mono">
-          <option v-for="s in allSectorStocks" :key="s.code" :value="s.code">{{ s.name }} {{ s.code }}</option>
+          <option v-for="s in allTrackedStocks" :key="s.code" :value="s.code">{{ s.name }} {{ s.code }}</option>
         </select></div>
       <div class="grid grid-cols-2 gap-[10px] mb-3.5">
         <div><label class="block text-xs text-slate-400 mb-1.5">成本價</label><input type="number" step="0.01" v-model.number="addHoldingForm.price" class="w-full bg-surface2 border border-line rounded-lg px-3 py-2.5 text-sm font-mono"></div>
@@ -553,7 +595,7 @@
       <div class="w-9 h-1 bg-line rounded mx-auto mb-3.5"></div>
       <div class="text-[17px] font-semibold mb-1">三大法人買賣超（外資＋投信）</div>
       <div class="text-[11px] text-slate-500 mb-3">近5日累計買賣超張數，正值為買超</div>
-      <div v-for="s in allSectorStocks" :key="s.code" class="flex items-center justify-between py-2.5 border-b border-line last:border-b-0">
+      <div v-for="s in allSectorStocks" :key="s.code" @click="openRawStock(s)" class="flex items-center justify-between py-2.5 border-b border-line last:border-b-0 cursor-pointer active:opacity-70">
         <div>
           <div class="text-[13px] font-semibold">{{ s.name }} <span class="font-mono text-[11px] text-slate-500">{{ s.code }}</span></div>
         </div>
@@ -1119,6 +1161,7 @@ function tabIconFn(key, active){
     screener:`<path d="M4 18l4-6 4 3 5-8 3 4" stroke="${c}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>`,
     sector:`<rect x="4" y="4" width="7" height="7" rx="1.5" stroke="${c}" stroke-width="1.7"/><rect x="13" y="4" width="7" height="7" rx="1.5" stroke="${c}" stroke-width="1.7"/><rect x="4" y="13" width="7" height="7" rx="1.5" stroke="${c}" stroke-width="1.7"/><rect x="13" y="13" width="7" height="7" rx="1.5" stroke="${c}" stroke-width="1.7"/>`,
     holdings:`<path d="M4 7h16M4 12h16M4 17h10" stroke="${c}" stroke-width="1.8" stroke-linecap="round"/>`,
+    watchlist:`<path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12z" stroke="${c}" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" stroke="${c}" stroke-width="1.6"/>`,
     settings:`<circle cx="12" cy="12" r="3" stroke="${c}" stroke-width="1.7"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3.9a7 7 0 0 0-2-1.2L14 3h-4l-.6 2.6a7 7 0 0 0-2 1.2l-2.3-.9-2 3.4 2 1.5a7 7 0 0 0 0 2.4l-2 1.5 2 3.4 2.3-.9a7 7 0 0 0 2 1.2L10 21h4l.6-2.6a7 7 0 0 0 2-1.2l2.3.9 2-3.4-2-1.5c.07-.4.1-.8.1-1.2z" stroke="${c}" stroke-width="1.3" stroke-linejoin="round"/>`,
   };
   return icons[key]||'';
@@ -1160,10 +1203,13 @@ const app = createApp({
       dispInput:'',
       csvInput:'',
       idxInput:'',
+      watchlist: [],
+      newWatchForm: {code:'', name:''},
       tabs: [
         {key:'dashboard', label:'總覽', icon:(a)=>tabIconFn('dashboard',a)},
         {key:'screener', label:'選股', icon:(a)=>tabIconFn('screener',a)},
         {key:'sector', label:'板塊', icon:(a)=>tabIconFn('sector',a)},
+        {key:'watchlist', label:'觀察', icon:(a)=>tabIconFn('watchlist',a)},
         {key:'holdings', label:'持股', icon:(a)=>tabIconFn('holdings',a)},
         {key:'settings', label:'設定', icon:(a)=>tabIconFn('settings',a)},
       ],
@@ -1186,6 +1232,37 @@ const app = createApp({
         list.forEach(s=>{ if(!seen[s.code]){ seen[s.code]=true; out.push({...s, sector}); } });
       });
       return out;
+    });
+
+    // 供資料抓取使用：板塊觀察池 + 使用者自訂的重點觀察股（去重）
+    const allTrackedStocks = computed(()=>{
+      const base = allSectorStocks.value;
+      const seen = new Set(base.map(s=>s.code));
+      const extra = state.watchlist.filter(w=>!seen.has(w.code)).map(w=>({code:w.code, name:w.name, sector:'觀察清單'}));
+      return [...base, ...extra];
+    });
+
+    // 觀察股清單的個股資訊：優先用完整篩選分析結果，未過流動性門檻或資料不足時仍顯示基本價格
+    const watchlistResults = computed(()=>{
+      return state.watchlist.map(w=>{
+        const bars = state.histories[w.code];
+        const isDisposed = state.disposition.includes(w.code);
+        if(!bars || bars.length<2){
+          return {code:w.code, name:w.name, sector:'觀察清單', close:null, changePct:0, ma5:null,
+            watchOnly:false, finalBuySignal:false, isDisposed, closesForSpark:[]};
+        }
+        const a = analyzeStock(bars, state.instFlows[w.code], state.settings, isDisposed);
+        if(a && a.liquidityPass){
+          return {...a, code:w.code, name:w.name, sector:'觀察清單'};
+        }
+        const i = bars.length-1, today = bars[i], yday = bars[i-1];
+        return {
+          code:w.code, name:w.name, sector:'觀察清單', close:today.close,
+          changePct: yday ? (today.close-yday.close)/yday.close*100 : 0,
+          ma5:null, watchOnly:false, finalBuySignal:false, isDisposed,
+          closesForSpark: bars.map(b=>b.close).slice(-30),
+        };
+      });
     });
 
     function marketRegimeFor(indexBars){
@@ -1420,6 +1497,7 @@ const app = createApp({
       state.sectors = await sget('sector-stocks', JSON.parse(JSON.stringify(DEFAULT_SECTORS)));
       state.disposition = await sget('disposition-list', []);
       state.holdings = await sget('holdings', []);
+      state.watchlist = await sget('watchlist', []);
       state.indexHistory = await sget('index-history', []);
       state.otcIndexHistory = await sget('otc-index-history', []);
       state.stockInfo = await sget('stock-info', {});
@@ -1475,7 +1553,7 @@ const app = createApp({
         try{ const r = await fetchIndexWithFallback('TPEx', token); state.otcIndexHistory = r.bars; noteSource(r.source); }
         catch(e){ pushError('櫃買報酬指數取得失敗：'+(e.message||e)); }
 
-        const stocks = allSectorStocks.value;
+        const stocks = allTrackedStocks.value;
         const todayStr = taipeiDateStr();
         let done = 0, skipped = 0;
         await pMapLimit(stocks, 2, async (s)=>{
@@ -1577,11 +1655,27 @@ const app = createApp({
     function confirmAddHolding(){
       const { code, price, date } = state.addHoldingForm;
       if(!code || !price || !date){ showToast('請完整填寫資料'); return; }
-      const stock = allSectorStocks.value.find(s=>s.code===code);
+      const stock = allTrackedStocks.value.find(s=>s.code===code);
       state.holdings.push({code, name: stock?stock.name:code, entryPrice:price, entryDate:date, dispositionAction:'clear'});
       saveHoldings(); state.modal=null; showToast('已新增持股');
     }
     function removeHolding(idx){ state.holdings.splice(idx,1); saveHoldings(); }
+
+    /* ---------- 觀察股（非持股） ---------- */
+    async function saveWatchlist(){ await sset('watchlist', state.watchlist); }
+    function addWatchlist(){
+      const code = state.newWatchForm.code.trim();
+      let name = state.newWatchForm.name.trim();
+      if(!code) { showToast('請輸入股票代碼'); return; }
+      if(state.watchlist.some(w=>w.code===code)){ showToast('已在觀察清單中'); return; }
+      if(!name && state.stockInfo[code]) name = state.stockInfo[code].name;
+      if(!name) name = code;
+      state.watchlist.push({code, name, addedDate: taipeiDateStr()});
+      state.newWatchForm.code=''; state.newWatchForm.name='';
+      saveWatchlist();
+      showToast(state.histories[code] ? `已加入觀察：${name}` : `已加入觀察：${name}（請按「更新資料」取得股價）`);
+    }
+    function removeWatchlist(idx){ state.watchlist.splice(idx,1); saveWatchlist(); }
 
     async function resetAll(){
       if(!confirm('確定要清除所有本機資料（設定／觀察池／持股／K線快取）嗎？此操作無法復原。')) return;
@@ -1631,6 +1725,7 @@ const app = createApp({
       sectorStockResults, holdingEval, holdingBorderClass, sparkPoints, tagsHtml,
       onRefresh, saveSettings, addStock, removeStock, addDisposition, removeDisposition,
       importCSV, importIndex, confirmAddHolding, removeHolding, saveHoldings, resetAll,
+      watchlistResults, allTrackedStocks, addWatchlist, removeWatchlist,
       openStockDetail, openSectorDetail, openRawStock, openDataStatusDetail,
       filterByPeriod, trendChartSVG, dataFreshnessNote, setChartPeriod, instFlowSum,
       boundedBars, pointInTimeValue, clearChartDate, taipeiDateStr,
