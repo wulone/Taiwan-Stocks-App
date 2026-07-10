@@ -401,6 +401,42 @@
         </div>
       </div>
 
+      <div class="font-disp font-semibold text-[17px] mb-2.5">GitHub 跨裝置同步 <span class="text-[11px] text-slate-500 font-body font-normal">選填・進階</span></div>
+      <div class="bg-surface border border-line rounded-2xl p-3.5 mb-4">
+        <div class="text-[11px] text-slate-500 mb-3 leading-relaxed">
+          開啟後，每次「更新資料」如果真的抓到比之前更新的資料，會自動存一份到您的 GitHub repo（一個 JSON 檔案）；其他裝置（例如手機、電腦）打開這個 App 時，會自動比對並採用 GitHub 上較新的版本，不用每個裝置各自重新抓一次。
+        </div>
+        <div class="flex items-center justify-between mb-3">
+          <div class="text-xs text-slate-300">啟用同步</div>
+          <div @click="settings.githubSyncEnabled=!settings.githubSyncEnabled; saveSettings()" class="flex-none w-10 h-6 rounded-full relative cursor-pointer" :class="settings.githubSyncEnabled ? 'bg-gold' : 'bg-surface2 border border-line'">
+            <div class="absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all" :style="{left: settings.githubSyncEnabled ? '18px' : '2px'}"></div>
+          </div>
+        </div>
+        <template v-if="settings.githubSyncEnabled">
+          <div class="grid grid-cols-2 gap-2 mb-2.5">
+            <div><label class="block text-xs text-slate-400 mb-1.5">GitHub 帳號</label>
+              <input type="text" v-model="settings.githubOwner" @change="saveSettings" placeholder="wulone" class="w-full bg-surface2 border border-line rounded-lg px-3 py-2 text-sm font-mono"></div>
+            <div><label class="block text-xs text-slate-400 mb-1.5">Repository</label>
+              <input type="text" v-model="settings.githubRepo" @change="saveSettings" placeholder="Taiwan-Stocks-App" class="w-full bg-surface2 border border-line rounded-lg px-3 py-2 text-sm font-mono"></div>
+          </div>
+          <div class="grid grid-cols-2 gap-2 mb-2.5">
+            <div><label class="block text-xs text-slate-400 mb-1.5">Branch</label>
+              <input type="text" v-model="settings.githubBranch" @change="saveSettings" placeholder="main" class="w-full bg-surface2 border border-line rounded-lg px-3 py-2 text-sm font-mono"></div>
+            <div><label class="block text-xs text-slate-400 mb-1.5">資料檔名</label>
+              <input type="text" v-model="settings.githubDataPath" @change="saveSettings" placeholder="data-cache.json" class="w-full bg-surface2 border border-line rounded-lg px-3 py-2 text-sm font-mono"></div>
+          </div>
+          <div class="mb-2.5">
+            <label class="block text-xs text-slate-400 mb-1.5">Personal Access Token（寫入需要，讀取可留空）</label>
+            <input type="password" v-model="settings.githubToken" @change="saveSettings" placeholder="ghp_xxxxxxxxxxxx" class="w-full bg-surface2 border border-line rounded-lg px-3 py-2.5 text-sm font-mono">
+            <div class="text-[10.5px] text-slate-500 mt-1.5 leading-relaxed">
+              建議用 GitHub 的 <b class="text-slate-300">Fine-grained token</b>（Settings → Developer settings → Personal access tokens → Fine-grained tokens），Repository access 只選這個 repo，Permissions 只給 <b class="text-slate-300">Contents: Read and write</b> 就好，不要用有完整帳號權限的 classic token。Token 只會存在您這台裝置的瀏覽器裡，不會傳到 FinMind 或其他地方。
+            </div>
+          </div>
+          <button @click="manualGithubSync" class="w-full bg-surface2 border border-line text-slate-100 text-xs font-medium py-2.5 rounded-lg">立即手動同步</button>
+          <div v-if="githubSyncStatus" class="text-[10.5px] text-slate-400 mt-2">{{ githubSyncStatus }}</div>
+        </template>
+      </div>
+
       <div class="font-disp font-semibold text-[17px] mb-2.5">篩選門檻</div>
       <div class="bg-surface border border-line rounded-2xl p-3.5 mb-4 space-y-3.5">
         <div><label class="block text-xs text-slate-400 mb-1.5">20日均量流動性門檻（張）</label>
@@ -696,6 +732,12 @@ const FINMIND_URL = 'https://api.finmindtrade.com/api/v4/data';
 
 const DEFAULT_SETTINGS = {
   finmindToken: '',
+  githubSyncEnabled: false,
+  githubOwner: '',
+  githubRepo: '',
+  githubBranch: 'main',
+  githubToken: '',
+  githubDataPath: 'data-cache.json',
   liquidityMinLots: 1500,
   triggerVolMinLots: 3000,
   volRatioMin: 1.5,
@@ -1151,6 +1193,45 @@ async function fetchInstFlowWithFallback(code, token){
 }
 
 async function sleepMs(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+/* =========================================================================
+   GitHub 同步：把抓到的資料快取（歷史K線/法人/新聞/指數）存回 GitHub repo 的
+   一個 JSON 檔案，讓手機、電腦等不同裝置能透過同一個 repo 共用最新資料，
+   不用每個裝置各自重新向 FinMind 抓一次。
+   ========================================================================= */
+function b64EncodeUnicode(str){
+  return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (m,p)=>String.fromCharCode('0x'+p)));
+}
+function b64DecodeUnicode(str){
+  return decodeURIComponent(atob(str).split('').map(c=>'%'+('00'+c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+}
+async function githubGetFile(owner, repo, path, branch, token){
+  const url = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(branch)}`;
+  const headers = {Accept:'application/vnd.github+json'};
+  if(token) headers['Authorization'] = 'Bearer '+token;
+  const res = await fetch(url, {headers});
+  if(res.status===404) return null;
+  if(!res.ok) throw new Error('GitHub 讀取失敗 HTTP '+res.status);
+  const j = await res.json();
+  return { sha: j.sha, content: JSON.parse(b64DecodeUnicode(j.content.replace(/\n/g,''))) };
+}
+async function githubPutFile(owner, repo, path, branch, token, dataObj, sha){
+  if(!token) throw new Error('缺少 GitHub Token，無法寫入');
+  const url = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}`;
+  const body = {
+    message: `chore: 更新資料快取 ${dataObj.syncedAt}`,
+    content: b64EncodeUnicode(JSON.stringify(dataObj)),
+    branch,
+  };
+  if(sha) body.sha = sha;
+  const res = await fetch(url, {
+    method:'PUT',
+    headers: {Accept:'application/vnd.github+json', 'Authorization':'Bearer '+token, 'Content-Type':'application/json'},
+    body: JSON.stringify(body),
+  });
+  if(!res.ok){ const t = await res.text().catch(()=> ''); throw new Error('GitHub 寫入失敗 HTTP '+res.status+' '+t.slice(0,200)); }
+  return await res.json();
+}
 async function withRetry(fn, retries, delayMs){
   retries = retries==null?2:retries; delayMs = delayMs==null?700:delayMs;
   let lastErr;
@@ -1262,6 +1343,7 @@ const app = createApp({
       indexModalMarket: 'TAIEX',
       forceFullRefresh: false,
       lastUpdateTs: null,
+      githubSyncStatus: '',
       addHoldingForm: {code:'', price:null, date:new Date().toISOString().slice(0,10)},
       newStockForm: {},
       dispInput:'',
@@ -1581,6 +1663,97 @@ const app = createApp({
       await sset('otc-index-history', state.otcIndexHistory);
       await sset('stock-info', state.stockInfo);
     }
+
+    function githubConfigured(needToken){
+      const s = state.settings;
+      if(!s.githubSyncEnabled || !s.githubOwner || !s.githubRepo) return false;
+      return needToken ? !!s.githubToken : true;
+    }
+    function buildSyncSnapshot(){
+      // 精簡內容：每檔股票只留最近90天K線、近5日法人、近5則新聞，避免檔案過大
+      const trimHist = {};
+      Object.entries(state.histories).forEach(([c,b])=>{ trimHist[c] = (b||[]).slice(-90); });
+      const trimInst = {};
+      Object.entries(state.instFlows).forEach(([c,f])=>{ trimInst[c] = (f||[]).slice(-15); });
+      const trimNews = {};
+      Object.entries(state.news).forEach(([c,n])=>{ trimNews[c] = (n||[]).slice(0,5); });
+      return {
+        syncedAt: new Date().toISOString(),
+        syncedAtTaipei: taipeiDateStr(),
+        indexHistory: (state.indexHistory||[]).slice(-90),
+        otcIndexHistory: (state.otcIndexHistory||[]).slice(-90),
+        histories: trimHist,
+        instFlows: trimInst,
+        news: trimNews,
+      };
+    }
+    async function pushToGitHub(){
+      if(!githubConfigured(true)) return;
+      const { githubOwner:owner, githubRepo:repo, githubBranch:branch, githubToken:token, githubDataPath:path } = state.settings;
+      try{
+        state.githubSyncStatus = '同步至 GitHub...';
+        let existing = null;
+        try{ existing = await githubGetFile(owner, repo, path, branch, token); }catch(e){ /* 檔案可能還不存在 */ }
+        const snapshot = buildSyncSnapshot();
+        await githubPutFile(owner, repo, path, branch, token, snapshot, existing?existing.sha:null);
+        state.githubSyncStatus = `已同步至 GitHub（${snapshot.syncedAtTaipei}）`;
+        await sset('github-last-sync', snapshot.syncedAt);
+      }catch(e){
+        state.githubSyncStatus = 'GitHub 同步失敗：'+(e.message||e);
+        pushError('GitHub 同步失敗：'+(e.message||e));
+      }
+    }
+    async function pullFromGitHub(){
+      if(!githubConfigured(false)) return false;
+      const { githubOwner:owner, githubRepo:repo, githubBranch:branch, githubToken:token, githubDataPath:path } = state.settings;
+      try{
+        const remote = await githubGetFile(owner, repo, path, branch, token);
+        if(!remote || !remote.content) return false;
+        const remoteData = remote.content;
+        const localTs = await sget('github-last-sync', null);
+        // 只有「GitHub 上的資料比本機記得的更新」時，才採用並覆蓋本機，避免舊資料蓋掉新資料
+        if(localTs && remoteData.syncedAt && remoteData.syncedAt <= localTs) return false;
+        Object.entries(remoteData.histories||{}).forEach(([c,b])=>{
+          const localBars = state.histories[c];
+          if(!localBars || !localBars.length || (b.length && b[b.length-1].date > localBars[localBars.length-1].date)){
+            state.histories[c] = b;
+          }
+        });
+        Object.entries(remoteData.instFlows||{}).forEach(([c,f])=>{
+          const localFlow = state.instFlows[c];
+          if(!localFlow || !localFlow.length) state.instFlows[c] = f;
+        });
+        Object.entries(remoteData.news||{}).forEach(([c,n])=>{
+          const existing = state.news[c]||[];
+          const seenLinks = new Set(existing.map(x=>x.link));
+          state.news[c] = existing.concat((n||[]).filter(x=>!seenLinks.has(x.link))).slice(0,20);
+        });
+        if(remoteData.indexHistory && remoteData.indexHistory.length &&
+           (!state.indexHistory.length || remoteData.indexHistory[remoteData.indexHistory.length-1].date > state.indexHistory[state.indexHistory.length-1].date)){
+          state.indexHistory = remoteData.indexHistory;
+        }
+        if(remoteData.otcIndexHistory && remoteData.otcIndexHistory.length &&
+           (!state.otcIndexHistory.length || remoteData.otcIndexHistory[remoteData.otcIndexHistory.length-1].date > state.otcIndexHistory[state.otcIndexHistory.length-1].date)){
+          state.otcIndexHistory = remoteData.otcIndexHistory;
+        }
+        await sset('github-last-sync', remoteData.syncedAt);
+        await persistHistories();
+        state.githubSyncStatus = `已從 GitHub 取得較新資料（${remoteData.syncedAtTaipei||''}）`;
+        return true;
+      }catch(e){
+        state.githubSyncStatus = 'GitHub 讀取失敗：'+(e.message||e);
+        return false;
+      }
+    }
+    async function manualGithubSync(){
+      state.loading = true;
+      await pullFromGitHub();
+      await pushToGitHub();
+      runScreen();
+      state.loading = false;
+      showToast(state.githubSyncStatus||'同步完成');
+    }
+
     async function loadAll(){
       const loadedSettings = await sget('settings', null);
       state.settings = loadedSettings ? {...DEFAULT_SETTINGS, ...loadedSettings} : {...DEFAULT_SETTINGS};
@@ -1596,6 +1769,9 @@ const app = createApp({
         const h = await sget('history-'+s.code, null); if(h) state.histories[s.code]=h;
         const f = await sget('inst-'+s.code, null); if(f) state.instFlows[s.code]=f;
         const n = await sget('news-'+s.code, null); if(n) state.news[s.code]=n;
+      }
+      if(githubConfigured(false)){
+        try{ await pullFromGitHub(); }catch(e){ /* 開機時同步失敗不阻斷主流程 */ }
       }
       runScreen();
     }
@@ -1689,6 +1865,14 @@ const app = createApp({
         await sset('last-update-ts', state.lastUpdateTs);
 
         await persistHistories();
+
+        // 只有「這次真的抓到新資料」(扣掉單純跳過的部分還有成功次數)才推送到 GitHub，
+        // 避免資料沒有變動時還一直寫入 repo
+        const gotNewData = (successCount - skipped) > 0;
+        if(gotNewData && githubConfigured(true)){
+          await pushToGitHub();
+        }
+
         runScreen();
         if(successCount===0 && stocks.length>0){
           showToast('更新失敗：所有股票都抓不到資料，請看總覽頁的錯誤訊息');
@@ -1831,6 +2015,7 @@ const app = createApp({
       filterByPeriod, trendChartSVG, dataFreshnessNote, setChartPeriod, instFlowSum,
       boundedBars, pointInTimeValue, clearChartDate, taipeiDateStr,
       clearDashChartDate, setDashChartPeriod, sectorTrendSpark, fmtAxis, periodHighLow,
+      manualGithubSync,
     };
   }
 });
