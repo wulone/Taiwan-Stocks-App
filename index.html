@@ -535,10 +535,23 @@
     <div class="bg-surface border-t border-line w-full max-w-[520px] mx-auto rounded-t-2xl p-4 pb-6 max-h-[85vh] overflow-y-auto">
       <div class="w-9 h-1 bg-line rounded mx-auto mb-3.5"></div>
       <div class="text-xs text-slate-500 uppercase tracking-wide mb-2.5">新增持股</div>
-      <div class="mb-3"><label class="block text-xs text-slate-400 mb-1.5">股票</label>
+      <div class="mb-3">
+        <div class="flex items-center justify-between mb-1.5">
+          <label class="text-xs text-slate-400">股票</label>
+          <div v-if="addHoldingPreview" class="text-right">
+            <template v-if="addHoldingPreview.hasData">
+              <span class="text-[11px] text-slate-300 font-medium mr-1.5">{{ addHoldingPreview.name }}</span>
+              <span class="font-mono text-[12.5px] font-semibold">{{ fmt(addHoldingPreview.close,2) }}</span>
+              <span class="font-mono text-[11px] ml-1" :class="pctClass(addHoldingPreview.changePct)">{{ pctSign(addHoldingPreview.changePct) }}{{ fmt(addHoldingPreview.changePct,2) }}%</span>
+              <div class="text-[10px] text-slate-500 font-mono mt-0.5">高 {{ fmt(addHoldingPreview.high,2) }}　低 {{ fmt(addHoldingPreview.low,2) }}　（{{ addHoldingPreview.date }}）</div>
+            </template>
+            <span v-else class="text-[10.5px] text-gold">{{ addHoldingPreview.name }}・尚無股價資料，請先更新資料</span>
+          </div>
+        </div>
         <select v-model="addHoldingForm.code" class="w-full bg-surface2 border border-line rounded-lg px-3 py-2.5 text-sm font-mono">
           <option v-for="s in allTrackedStocks" :key="s.code" :value="s.code">{{ s.name }} {{ s.code }}</option>
-        </select></div>
+        </select>
+      </div>
       <div class="grid grid-cols-2 gap-[10px] mb-3.5">
         <div><label class="block text-xs text-slate-400 mb-1.5">成本價</label><input type="number" step="0.01" v-model.number="addHoldingForm.price" class="w-full bg-surface2 border border-line rounded-lg px-3 py-2.5 text-sm font-mono"></div>
         <div><label class="block text-xs text-slate-400 mb-1.5">買進日期</label><input type="date" v-model="addHoldingForm.date" class="w-full bg-surface2 border border-line rounded-lg px-3 py-2.5 text-sm font-mono text-slate-100"></div>
@@ -1406,6 +1419,22 @@ const app = createApp({
     });
 
     // 觀察股清單的個股資訊：優先用完整篩選分析結果，未過流動性門檻或資料不足時仍顯示基本價格
+    const addHoldingPreview = computed(()=>{
+      const code = state.addHoldingForm.code;
+      if(!code) return null;
+      const stock = allTrackedStocks.value.find(s=>s.code===code);
+      const bars = state.histories[code];
+      if(!bars || !bars.length){
+        return { name: stock?stock.name:code, code, hasData:false };
+      }
+      const i = bars.length-1, today = bars[i], yday = bars[i-1];
+      return {
+        name: stock?stock.name:code, code, hasData:true,
+        close: today.close, high: today.high, low: today.low, date: today.date,
+        changePct: yday ? (today.close-yday.close)/yday.close*100 : 0,
+      };
+    });
+
     const watchlistResults = computed(()=>{
       return state.watchlist.map(w=>{
         const bars = state.histories[w.code];
@@ -2072,7 +2101,7 @@ const app = createApp({
       holdingChartSVG, barsSinceEntry,
       onRefresh, saveSettings, addStock, removeStock, addDisposition, removeDisposition,
       importCSV, importIndex, confirmAddHolding, removeHolding, saveHoldings, resetAll,
-      watchlistResults, allTrackedStocks, addWatchlist, removeWatchlist, allNewsFlat,
+      watchlistResults, allTrackedStocks, addWatchlist, removeWatchlist, allNewsFlat, addHoldingPreview,
       quickAddWatch, quickAddHolding,
       openStockDetail, openSectorDetail, openRawStock, openDataStatusDetail,
       filterByPeriod, trendChartSVG, dataFreshnessNote, setChartPeriod, instFlowSum,
