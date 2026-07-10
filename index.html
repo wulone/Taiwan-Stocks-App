@@ -9,7 +9,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="波段電路">
 <meta name="description" content="台股中短期波段選股與看盤工具，加到主畫面可像 App 一樣使用">
-<link rel="manifest" href="data:application/manifest+json,{%22name%22:%22%E6%B3%A2%E6%AE%B5%E9%9B%BB%E8%B7%AF%22,%22short_name%22:%22%E6%B3%A2%E6%AE%B5%E9%9B%BB%E8%B7%AF%22,%22start_url%22:%22.%22,%22display%22:%22standalone%22,%22background_color%22:%22%230A0E13%22,%22theme_color%22:%22%230A0E13%22}">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
 <title>波段電路｜台股供應鏈選股系統</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -1563,6 +1565,12 @@ const app = createApp({
   }
 });
 app.mount('#app');
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{ /* 非必要功能，註冊失敗不影響主功能 */ });
+  });
+}
 </script>
 </body>
 </html>
