@@ -99,6 +99,10 @@
           <div>60MA <b class="font-mono text-slate-100 font-medium">{{ fmt(taiexRegime.ma60,0) }}</b></div>
           <div>資料日 <b class="font-mono text-slate-100 font-medium">{{ taiexRegime.date }}</b></div>
         </div>
+        <div v-if="taiexRegime.chg3d || taiexRegime.chg5d" class="flex gap-4 mt-1.5 text-[11px] text-slate-400 flex-wrap">
+          <div v-if="taiexRegime.chg3d">3日(交易日) <b class="font-mono font-medium" :class="pctClass(taiexRegime.chg3d.pct)">{{ pctSign(taiexRegime.chg3d.pct) }}{{ fmt(taiexRegime.chg3d.pct,2) }}%</b></div>
+          <div v-if="taiexRegime.chg5d">5日(交易日) <b class="font-mono font-medium" :class="pctClass(taiexRegime.chg5d.pct)">{{ pctSign(taiexRegime.chg5d.pct) }}{{ fmt(taiexRegime.chg5d.pct,2) }}%</b></div>
+        </div>
 
         <div class="mt-3.5 pt-3.5 border-t border-white/10">
           <div class="flex items-center justify-between gap-2 flex-wrap">
@@ -584,6 +588,8 @@
         <div class="flex justify-between text-[13px]"><span class="text-slate-400">目前狀態</span>
           <span class="font-mono font-semibold" :class="(indexModalMarket==='TAIEX'?taiexRegime:otcRegime).buyMode ? 'text-up' : 'text-down'">{{ (indexModalMarket==='TAIEX'?taiexRegime:otcRegime).known ? ((indexModalMarket==='TAIEX'?taiexRegime:otcRegime).buyMode ? '站上60MA' : '跌破60MA') : '資料不足' }}</span></div>
         <div class="flex justify-between text-[13px]"><span class="text-slate-400">60MA</span><span class="font-mono">{{ fmt((indexModalMarket==='TAIEX'?taiexRegime:otcRegime).ma60,0) }}</span></div>
+        <div class="flex justify-between text-[13px]" v-if="(indexModalMarket==='TAIEX'?taiexRegime:otcRegime).chg3d"><span class="text-slate-400">3日漲跌幅（交易日）</span><span class="font-mono" :class="pctClass((indexModalMarket==='TAIEX'?taiexRegime:otcRegime).chg3d.pct)">{{ pctSign((indexModalMarket==='TAIEX'?taiexRegime:otcRegime).chg3d.pct) }}{{ fmt((indexModalMarket==='TAIEX'?taiexRegime:otcRegime).chg3d.pct,2) }}%</span></div>
+        <div class="flex justify-between text-[13px]" v-if="(indexModalMarket==='TAIEX'?taiexRegime:otcRegime).chg5d"><span class="text-slate-400">5日漲跌幅（交易日）</span><span class="font-mono" :class="pctClass((indexModalMarket==='TAIEX'?taiexRegime:otcRegime).chg5d.pct)">{{ pctSign((indexModalMarket==='TAIEX'?taiexRegime:otcRegime).chg5d.pct) }}{{ fmt((indexModalMarket==='TAIEX'?taiexRegime:otcRegime).chg5d.pct,2) }}%</span></div>
       </div>
       <div class="text-[10.5px] text-slate-500 mt-3 leading-relaxed">此系統以「日K線」為分析單位（符合中短期波段設計），不提供盤中即時逐筆走勢；資料為 FinMind 每日盤後更新，非開盤時段會顯示最近一個交易日的收盤資料，一律以台北時間判斷。</div>
     </div>
@@ -1265,12 +1271,20 @@ const app = createApp({
       });
     });
 
+    function nDayChange(bars, n){
+      if(!bars || bars.length <= n) return null;
+      const i = bars.length-1;
+      const cur = bars[i].close, prev = bars[i-n].close;
+      if(prev==null || cur==null || prev===0) return null;
+      return { pct:(cur-prev)/prev*100, fromDate: bars[i-n].date, toDate: bars[i].date };
+    }
     function marketRegimeFor(indexBars){
       if(!indexBars || indexBars.length<60) return {known:false};
       const closes = indexBars.map(b=>b.close);
       const ma60 = sma(indexBars,60,b=>b.close);
       const i = indexBars.length-1;
-      return { known: ma60[i]!=null, buyMode: ma60[i]!=null && closes[i]>ma60[i], last:closes[i], ma60:ma60[i], date: indexBars[i].date };
+      return { known: ma60[i]!=null, buyMode: ma60[i]!=null && closes[i]>ma60[i], last:closes[i], ma60:ma60[i], date: indexBars[i].date,
+        chg3d: nDayChange(indexBars,3), chg5d: nDayChange(indexBars,5) };
     }
     const taiexRegime = computed(()=> marketRegimeFor(state.indexHistory));
     const otcRegime = computed(()=> marketRegimeFor(state.otcIndexHistory));
