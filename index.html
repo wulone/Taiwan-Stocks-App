@@ -38,6 +38,15 @@
   @keyframes load{0%{left:-40%}100%{left:100%}}
   .anim-spin{animation:spin .9s linear infinite;}
   .loadbar-inner{animation:load 1s infinite ease-in-out;}
+  input[type=date]{
+    color-scheme: dark; /* 讓瀏覽器原生日期選擇器(含小日曆圖示)改用淺色，暗色底才看得清楚 */
+    color: #E7ECF2;
+  }
+  input[type=date]::-webkit-calendar-picker-indicator{
+    filter: invert(0.85);
+    opacity: 0.9;
+    cursor: pointer;
+  }
 </style>
 </head>
 <body class="bg-bg text-slate-100 font-body pb-20 m-0 min-h-screen">
@@ -412,7 +421,7 @@
         </select></div>
       <div class="grid grid-cols-2 gap-[10px] mb-3.5">
         <div><label class="block text-xs text-slate-400 mb-1.5">成本價</label><input type="number" step="0.01" v-model.number="addHoldingForm.price" class="w-full bg-surface2 border border-line rounded-lg px-3 py-2.5 text-sm font-mono"></div>
-        <div><label class="block text-xs text-slate-400 mb-1.5">買進日期</label><input type="date" v-model="addHoldingForm.date" class="w-full bg-surface2 border border-line rounded-lg px-3 py-2.5 text-sm font-mono"></div>
+        <div><label class="block text-xs text-slate-400 mb-1.5">買進日期</label><input type="date" v-model="addHoldingForm.date" class="w-full bg-surface2 border border-line rounded-lg px-3 py-2.5 text-sm font-mono text-slate-100"></div>
       </div>
       <button @click="confirmAddHolding" class="w-full bg-gold text-[#1A1305] font-semibold text-sm py-[11px] rounded-xl">確認新增</button>
     </div>
@@ -430,7 +439,7 @@
       </div>
 
       <div class="flex items-center gap-2 mt-3">
-        <input type="date" v-model="chartAsOfDate" :max="taipeiDateStr()" class="flex-1 bg-surface2 border border-line rounded-lg px-2.5 py-1.5 text-[11px] font-mono">
+        <input type="date" v-model="chartAsOfDate" :max="taipeiDateStr()" class="flex-1 bg-surface2 border border-line rounded-lg px-2.5 py-1.5 text-[11px] font-mono text-slate-100">
         <button v-if="chartAsOfDate" @click="clearChartDate" class="text-[11px] px-2.5 py-1.5 rounded-lg border border-line text-slate-400 whitespace-nowrap">回到最新</button>
       </div>
       <div class="flex gap-1.5 mt-2">
@@ -503,7 +512,7 @@
         <span class="font-mono text-[11.5px] ml-1.5" :class="pctClass(pointInTimeValue(indexModalMarket==='TAIEX' ? indexHistory : otcIndexHistory).changePct)">{{ pctSign(pointInTimeValue(indexModalMarket==='TAIEX' ? indexHistory : otcIndexHistory).changePct) }}{{ fmt(pointInTimeValue(indexModalMarket==='TAIEX' ? indexHistory : otcIndexHistory).changePct,2) }}%</span>
       </div>
       <div class="flex items-center gap-2 mt-2.5">
-        <input type="date" v-model="chartAsOfDate" :max="taipeiDateStr()" class="flex-1 bg-surface2 border border-line rounded-lg px-2.5 py-1.5 text-[11px] font-mono">
+        <input type="date" v-model="chartAsOfDate" :max="taipeiDateStr()" class="flex-1 bg-surface2 border border-line rounded-lg px-2.5 py-1.5 text-[11px] font-mono text-slate-100">
         <button v-if="chartAsOfDate" @click="clearChartDate" class="text-[11px] px-2.5 py-1.5 rounded-lg border border-line text-slate-400 whitespace-nowrap">回到最新</button>
       </div>
       <div class="flex gap-1.5 mt-2">
